@@ -57,17 +57,14 @@ func (rf *Raft) dispatcher() {
 				continue
 			}
 
-			rf.mu.Lock()
-			DPrintf("%d sending heartbeat to %d on term %d\n", rf.me, i, rf.currentTerm)
-			rf.mu.Unlock()
-
 			go func(i int) {
 				rf.mu.Lock()
 				args := AppendEntriesArgs{
-					Term:         rf.currentTerm,
-					CandidateId:  rf.me,
-					LastLogIndex: rf.lastLogIndex(),
-					LastLogTerm:  rf.currentTerm,
+					Term:              rf.currentTerm,
+					LeaderId:          rf.me,
+					PrevLogIndex:      rf.lastLogIndex() - 1,
+					PrevLogTerm:       rf.lastLogTerm(),
+					LeaderCommitIndex: rf.commitIndex,
 				}
 				rf.mu.Unlock()
 

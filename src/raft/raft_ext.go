@@ -19,5 +19,17 @@ func (rf *Raft) NoHeartbeatIn(milliseconds int64) bool {
 }
 
 func (rf *Raft) lastLogIndex() int {
-	return len(rf.log) - 1
+	return len(rf.log)
+}
+
+func (rf *Raft) lastLogTerm() int {
+	return rf.log[rf.lastLogIndex()].Term
+}
+
+func (rf *Raft) appendLogEntry(entry Entry) int {
+	// Assumes a locked raft instance
+	index := rf.lastLogIndex() + 1
+	rf.log[index] = entry
+
+	return index
 }

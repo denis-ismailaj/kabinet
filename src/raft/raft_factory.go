@@ -1,6 +1,8 @@
 package raft
 
-import "6.824/labrpc"
+import (
+	"6.824/labrpc"
+)
 
 // Make
 // the service or tester wants to create a Raft server. the ports
@@ -23,6 +25,12 @@ func Make(
 	rf.peers = peers
 	rf.persister = persister
 	rf.me = me
+
+	rf.log = map[int]Entry{}
+	rf.matchIndex = map[int]int{}
+	rf.nextIndex = map[int]int{}
+
+	rf.applyChan = applyCh
 
 	rf.RevertToFollower(0)
 

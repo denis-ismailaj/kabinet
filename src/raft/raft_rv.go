@@ -33,15 +33,15 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 	if args.Term < rf.currentTerm {
 		reply.VoteGranted = false
-		reply.Term = rf.currentTerm
-
 		DPrintf("%d refusing %d on term %d because it's old, current %d\n", rf.me, args.CandidateId, args.Term, rf.currentTerm)
 
 	} else if args.Term == rf.currentTerm && rf.votedFor != nil {
-
 		DPrintf("%d refusing %d on term %d because it has already voted\n", rf.me, args.CandidateId, args.Term)
 		reply.VoteGranted = false
-		reply.Term = rf.currentTerm
+
+	} else if args.LastLogTerm < rf.lastLogTerm() || args.LastLogIndex < rf.lastLogIndex() {
+		DPrintf("%d refusing %d on term %d because it has a stale log\n", rf.me, args.CandidateId, args.Term)
+		reply.VoteGranted = false
 
 	} else {
 		rf.currentTerm = args.Term
@@ -50,10 +50,11 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		rf.ResetElectionTimer()
 
 		reply.VoteGranted = true
-		reply.Term = rf.currentTerm
 
 		DPrintf("%d voting for %d on term %d\n", rf.me, args.CandidateId, args.Term)
 	}
+
+	reply.Term = rf.currentTerm
 }
 
 //
