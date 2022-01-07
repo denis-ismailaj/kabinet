@@ -93,7 +93,9 @@ func (rf *Raft) sendAppendEntry(i int, index int) {
 		DPrintf("%d Leader setting matchindex to %d for follower %d\n", rf.me, latestIndex, i)
 		rf.matchIndex[i] = latestIndex
 
-		if rf.IsIndexCommitted(firstEntry.Index) {
+		if rf.IsIndexCommitted(firstEntry.Index) && firstEntry.Index > rf.commitIndex {
+			DPrintf("%d Leader setting commitIndex to %d with command %v\n", rf.me, firstEntry.Index, rf.log[firstEntry.Index].Command)
+
 			for i := rf.commitIndex; i <= firstEntry.Index; i++ {
 				rf.applyChan <- ApplyMsg{
 					CommandValid: true,
@@ -102,16 +104,20 @@ func (rf *Raft) sendAppendEntry(i int, index int) {
 				}
 			}
 			rf.commitIndex = firstEntry.Index
-
-			DPrintf("%d Leader setting commitIndex to %d with command %v\n", rf.me, rf.commitIndex, rf.log[rf.commitIndex].Command)
 		}
 	} else {
 		if reply.Term > rf.currentTerm {
 			rf.RevertToFollower(reply.Term)
 		} else if rf.matchIndex[i] < index {
-			DPrintf("%d Leader failed to append entry index %d to follower %d. Trying again with index %d...\n", rf.me, index, i, reply.LastLogIndex+1)
+			if index <= reply.LastLogIndex+1 {
+				DPrintf("%d Leader failed to append entry index %d to follower %d. Trying again with index %d...\n", rf.me, index, i, index-1)
 
-			defer rf.sendAppendEntry(i, reply.LastLogIndex+1)
+				defer rf.sendAppendEntry(i, index-1)
+			} else {
+				DPrintf("%d Leader failed to append entry index %d to follower %d. Trying again with index %d...\n", rf.me, index, i, reply.LastLogIndex+1)
+
+				defer rf.sendAppendEntry(i, reply.LastLogIndex+1)
+			}
 		}
 	}
 
@@ -142,66 +148,69 @@ type AppendEntriesReply struct {
 //
 // AppendEntries RPC handler.
 //
+// Receiver implementation:
+// 1. Reply false if term < currentTerm (§5.1)
+// 2. Reply false if log doesn't contain an entry at prevLogIndex
+// 	whose term matches prevLogTerm (§5.3)
+// 3. If an existing entry conflicts with a new one (same index
+// 	but different terms), delete the existing entry and all that
+// 	follow it (§5.3)
+// 4. Append any new entries not already in the log
+// 5. If leaderCommit > commitIndex,
+//	set commitIndex = min(leaderCommit, index of last new entry)
+//
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
 	reply.Term = rf.currentTerm
 
-	if args.Term >= rf.currentTerm {
-		rf.lastHeartbeatTimestamp = time.Now()
-		if rf.status != Follower {
-			rf.RevertToFollower(args.Term)
-		}
-	}
-	if len(args.Entries) == 0 {
-		// ignore heartbeats for now
-	} else if args.Term < rf.currentTerm || args.PrevLogIndex > rf.lastLogIndex() {
-		DPrintf("%d ignoring log entry term %d prevleader %d lli %d\n", rf.me, rf.currentTerm, args.PrevLogIndex, rf.lastLogIndex())
+	if args.Term < rf.currentTerm {
+		DPrintf("%d ignoring entry from %d with old term %d. Current term is %d.\n", rf.me, args.LeaderId, args.Term, rf.currentTerm)
 		reply.Success = false
-		reply.LastLogIndex = rf.lastLogIndex()
-	} else if args.PrevLogIndex > 0 && rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
+
+		return
+	}
+
+	rf.lastHeartbeatTimestamp = time.Now()
+	if rf.status != Follower {
+		rf.RevertToFollower(args.Term)
+	}
+
+	if args.PrevLogIndex > 0 && rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
 		DPrintf("%d ignoring log entry term %d error %d on %d\n", rf.me, args.PrevLogTerm, rf.log[args.PrevLogIndex].Term, args.PrevLogIndex)
 		reply.Success = false
 		reply.LastLogIndex = rf.lastLogIndex()
-	} else {
-		for _, v := range args.Entries {
-			DPrintf("%d Follower logging entry with index %d term %d command %v\n", rf.me, v.Index, v.Term, v.Command)
-			rf.log[v.Index] = v
-		}
 
-		reply.Success = true
+		return
 	}
 
-	if args.LeaderCommitIndex > rf.commitIndex {
+	reply.Success = true
+
+	for _, v := range args.Entries {
+		DPrintf("%d Follower logging entry with index %d term %d command %v\n", rf.me, v.Index, v.Term, v.Command)
+		rf.log[v.Index] = v
+	}
+
+	if args.LeaderCommitIndex > rf.commitIndex && rf.commitIndex != rf.lastLogIndex() {
+		var newIndex int
+
 		if args.LeaderCommitIndex <= rf.lastLogIndex() {
-			newIndex := args.LeaderCommitIndex
-
-			for i := rf.commitIndex; i <= newIndex; i++ {
-				rf.applyChan <- ApplyMsg{
-					CommandValid: true,
-					Command:      rf.log[i].Command,
-					CommandIndex: i,
-				}
-				DPrintf("%d apply commitIndex to %d with command %v (same as leader)\n", rf.me, i, rf.log[i].Command)
-			}
-
-			rf.commitIndex = newIndex
-			DPrintf("%d updated commitIndex to %d with command %v (same as leader)\n", rf.me, rf.commitIndex, rf.log[rf.commitIndex].Command)
-		} else if rf.commitIndex != rf.lastLogIndex() {
-			newIndex := rf.lastLogIndex()
-
-			for i := rf.commitIndex; i <= newIndex; i++ {
-				rf.applyChan <- ApplyMsg{
-					CommandValid: true,
-					Command:      rf.log[i].Command,
-					CommandIndex: i,
-				}
-				DPrintf("%d apply commitIndex to %d with command %v (last log index)\n", rf.me, i, rf.log[i].Command)
-			}
-
-			rf.commitIndex = newIndex
-			DPrintf("%d updated commitIndex to %d with command %v (last log index)\n", rf.me, rf.commitIndex, rf.log[rf.commitIndex].Command)
+			newIndex = args.LeaderCommitIndex
+		} else {
+			newIndex = rf.lastLogIndex()
 		}
+
+		DPrintf("%d updated commitIndex to %d with command %v\n", rf.me, newIndex, rf.log[newIndex].Command)
+
+		for i := rf.commitIndex; i <= newIndex; i++ {
+			rf.applyChan <- ApplyMsg{
+				CommandValid: true,
+				Command:      rf.log[i].Command,
+				CommandIndex: i,
+			}
+		}
+
+		rf.commitIndex = newIndex
 	}
 }

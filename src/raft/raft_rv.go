@@ -39,7 +39,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		DPrintf("%d refusing %d on term %d because it has already voted\n", rf.me, args.CandidateId, args.Term)
 		reply.VoteGranted = false
 
-	} else if args.LastLogTerm < rf.lastLogTerm() || args.LastLogIndex < rf.lastLogIndex() {
+	} else if args.LastLogTerm < rf.lastLogTerm() || (args.LastLogTerm == rf.lastLogTerm() && args.LastLogIndex < rf.lastLogIndex()) {
 		DPrintf("%d refusing %d on term %d because it has a stale log\n", rf.me, args.CandidateId, args.Term)
 		reply.VoteGranted = false
 
@@ -96,7 +96,7 @@ func (rf *Raft) sendRequestVote(server int) *RequestVoteReply {
 		Term:         rf.currentTerm,
 		CandidateId:  rf.me,
 		LastLogIndex: rf.lastLogIndex(),
-		LastLogTerm:  rf.currentTerm,
+		LastLogTerm:  rf.lastLogTerm(),
 	}
 	rf.mu.Unlock()
 

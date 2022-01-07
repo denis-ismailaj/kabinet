@@ -62,7 +62,7 @@ func (rf *Raft) dispatcher() {
 				args := AppendEntriesArgs{
 					Term:              rf.currentTerm,
 					LeaderId:          rf.me,
-					PrevLogIndex:      rf.lastLogIndex() - 1,
+					PrevLogIndex:      rf.lastLogIndex(),
 					PrevLogTerm:       rf.lastLogTerm(),
 					LeaderCommitIndex: rf.commitIndex,
 				}
