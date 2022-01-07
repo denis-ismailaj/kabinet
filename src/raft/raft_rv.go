@@ -33,7 +33,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 	if args.Term < rf.currentTerm {
 		reply.VoteGranted = false
-		DPrintf("%d refusing %d on term %d because it's old, current %d\n", rf.me, args.CandidateId, args.Term, rf.currentTerm)
+		DPrintf("%d refusing %d on term %d because it's old, current term %d\n", rf.me, args.CandidateId, args.Term, rf.currentTerm)
 
 	} else if args.Term == rf.currentTerm && rf.votedFor != nil {
 		DPrintf("%d refusing %d on term %d because it has already voted\n", rf.me, args.CandidateId, args.Term)
@@ -43,6 +43,10 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		DPrintf("%d refusing %d on term %d because it has a stale log\n", rf.me, args.CandidateId, args.Term)
 		reply.VoteGranted = false
 
+		if args.Term > rf.currentTerm {
+			DPrintf("%d updating own term to %d\n", rf.me, args.Term)
+			rf.currentTerm = args.Term
+		}
 	} else {
 		rf.currentTerm = args.Term
 		rf.votedFor = &args.CandidateId

@@ -26,6 +26,17 @@ func (rf *Raft) lastLogTerm() int {
 	return rf.log[rf.lastLogIndex()].Term
 }
 
+func (rf *Raft) IsIndexCommitted(index int) bool {
+	// Assumes a locked raft instance
+	count := 0
+	for _, v := range rf.matchIndex {
+		if v >= index {
+			count++
+		}
+	}
+	return count > len(rf.peers)/2
+}
+
 func (rf *Raft) appendLogEntry(entry Entry) int {
 	// Assumes a locked raft instance
 	index := rf.lastLogIndex() + 1

@@ -42,14 +42,14 @@ func (rf *Raft) ticker() {
 // The dispatcher go routine sends heartbeats
 func (rf *Raft) dispatcher() {
 	for rf.killed() == false {
-		time.Sleep(time.Duration(120) * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 
 		rf.mu.Lock()
 		if rf.status != Leader {
 			rf.mu.Unlock()
 			continue
 		}
-		DPrintf("%d dispatching heartbeats on term %d\n", rf.me, rf.currentTerm)
+		DPrintf("%d Leader dispatching heartbeats on term %d\n", rf.me, rf.currentTerm)
 		rf.mu.Unlock()
 
 		for i := range rf.peers {
@@ -83,10 +83,6 @@ func (rf *Raft) StartElection() {
 		if i == rf.me {
 			continue
 		}
-
-		rf.mu.Lock()
-		DPrintf("%d asking for vote from %d on term %d\n", rf.me, i, rf.currentTerm)
-		rf.mu.Unlock()
 
 		go func(i int) {
 			reply := rf.sendRequestVote(i)

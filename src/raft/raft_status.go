@@ -14,8 +14,8 @@ func (rf *Raft) RevertToFollower(term int) {
 	// Assumes a locked raft instance
 
 	if rf.currentTerm != term {
-		DPrintf("%d reverting to follower on term %d\n", rf.me, rf.currentTerm)
 		rf.currentTerm = term
+		DPrintf("%d Leader reverting to follower on term %d\n", rf.me, rf.currentTerm)
 	}
 
 	rf.status = Follower
@@ -47,6 +47,6 @@ func (rf *Raft) BecomeLeader() {
 
 func (rf *Raft) ResetElectionTimer() {
 	// Assumes a locked raft instance
-	rf.electionTimeout = randomIntInRange(250, 400)
+	rf.electionTimeout = randomIntInRange(300, 400)
 	rf.lastHeartbeatTimestamp = time.Now()
 }
