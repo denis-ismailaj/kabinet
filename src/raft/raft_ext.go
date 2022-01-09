@@ -2,12 +2,16 @@ package raft
 
 import "time"
 
+// Extension methods for Raft
+// These methods simplify some common read-only operations and do not mutate any state.
+// All of them assume a locked Raft instance.
+
 func (rf *Raft) timeUntilPossibleTimeout() time.Duration {
-	if rf.lastHeartbeatTimestamp.IsZero() {
+	if rf.lastHeartbeat.IsZero() {
 		return time.Duration(rf.electionTimeout) * time.Millisecond
 	}
 
-	timePassed := time.Now().UnixMilli() - rf.lastHeartbeatTimestamp.UnixMilli()
+	timePassed := time.Now().UnixMilli() - rf.lastHeartbeat.UnixMilli()
 	timeLeft := rf.electionTimeout - timePassed
 
 	return time.Duration(timeLeft) * time.Millisecond
@@ -15,7 +19,7 @@ func (rf *Raft) timeUntilPossibleTimeout() time.Duration {
 
 func (rf *Raft) NoHeartbeatIn(milliseconds int64) bool {
 	threshold := time.Now().Add(time.Duration(-milliseconds) * time.Millisecond)
-	return rf.lastHeartbeatTimestamp.Before(threshold)
+	return rf.lastHeartbeat.Before(threshold)
 }
 
 func (rf *Raft) lastLogIndex() int {
@@ -27,7 +31,6 @@ func (rf *Raft) lastLogTerm() int {
 }
 
 func (rf *Raft) IsIndexCommitted(index int) bool {
-	// Assumes a locked raft instance
 	count := 0
 	for _, v := range rf.matchIndex {
 		if v >= index {
@@ -37,10 +40,6 @@ func (rf *Raft) IsIndexCommitted(index int) bool {
 	return count > len(rf.peers)/2
 }
 
-func (rf *Raft) appendLogEntry(entry Entry) int {
-	// Assumes a locked raft instance
-	index := rf.lastLogIndex() + 1
-	rf.log[index] = entry
-
-	return index
+func (rf *Raft) hasVotedFor(id int) bool {
+	return rf.votedFor != nil && *rf.votedFor == id
 }

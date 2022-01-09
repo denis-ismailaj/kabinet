@@ -2,6 +2,7 @@ package raft
 
 import (
 	"6.824/labrpc"
+	"sync"
 )
 
 // Make
@@ -25,14 +26,15 @@ func Make(
 	rf.peers = peers
 	rf.persister = persister
 	rf.me = me
+	rf.applyChan = applyCh
 
 	rf.log = map[int]Entry{}
 	rf.matchIndex = map[int]int{}
 	rf.nextIndex = map[int]int{}
+	rf.status = Follower
+	rf.statusCond = sync.NewCond(&rf.mu)
 
-	rf.applyChan = applyCh
-
-	rf.RevertToFollower(0)
+	rf.ResetElectionTimer()
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
@@ -40,6 +42,7 @@ func Make(
 	// start ticker goroutine to start elections
 	go rf.ticker()
 
+	// start dispatcher coroutine for heartbeats
 	go rf.dispatcher()
 
 	return rf
