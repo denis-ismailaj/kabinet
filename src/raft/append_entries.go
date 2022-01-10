@@ -94,9 +94,24 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 // Insert or update follower's log entries
 func (rf *Raft) upsertEntries(entries []Entry) {
+	if len(entries) == 0 {
+		return
+	}
+
 	for _, v := range entries {
 		DPrintf("%d Follower logging entry with index %d term %d command %v\n", rf.me, v.Index, v.Term, v.Command)
 		rf.log[v.Index] = v
+	}
+
+	// If there are old entries with higher indices than the ones supplied by the leader, delete them.
+	for i := entries[len(entries)-1].Index + 1; true; i++ {
+		_, exists := rf.log[i]
+		if exists {
+			delete(rf.log, i)
+			DPrintf("%d Follower deleted stale index %d, last index now is %d\n", rf.me, i, rf.lastLogIndex())
+		} else {
+			break
+		}
 	}
 
 	// Changes to the log need to be persisted.

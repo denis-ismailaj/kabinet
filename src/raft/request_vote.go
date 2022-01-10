@@ -1,7 +1,5 @@
 package raft
 
-import "time"
-
 // RequestVoteArgs
 // RequestVote RPC arguments structure.
 //
@@ -57,8 +55,8 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// If the server is not currently a follower, convert to one.
 	// Otherwise, just update term to the leader's if it is out of date.
 	if args.Term > rf.currentTerm {
-		DPrintf("%d updated term to %d because %d had %d\n", rf.me, rf.currentTerm, args.CandidateId, args.Term)
 		rf.BecomeFollowerOrUpdateTerm(args.Term)
+		DPrintf("%d updated term to %d because %d had %d\n", rf.me, rf.currentTerm, args.CandidateId, args.Term)
 	}
 
 	// The RPC includes information about the candidate’s log, and the voter denies its vote if its own log
@@ -67,8 +65,10 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// up-to-date. If the logs end with the same term, then whichever log is longer is more up-to-date (§5.4.1).
 	if args.LastLogTerm < rf.lastLogTerm() ||
 		(args.LastLogTerm == rf.lastLogTerm() && args.LastLogIndex < rf.lastLogIndex()) {
-
-		DPrintf("%d refusing %d on term %d because it has a stale log\n", rf.me, args.CandidateId, args.Term)
+		DPrintf(
+			"%d refusing %d on term %d because it has a stale log %d-%d\n",
+			rf.me, args.CandidateId, args.Term, args.LastLogTerm, args.LastLogIndex,
+		)
 		*reply = RequestVoteReply{
 			VoteGranted: false,
 		}
@@ -80,8 +80,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Vote for candidate
 	rf.votedFor = &args.CandidateId
 
-	// Reset election timer.
-	rf.lastHeartbeat = time.Now()
+	rf.ResetElectionTimer()
 
 	// Changes to votedFor need to be persisted.
 	rf.persist()

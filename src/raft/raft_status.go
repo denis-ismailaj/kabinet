@@ -25,8 +25,7 @@ func (rf *Raft) BecomeFollowerOrUpdateTerm(term int) {
 	// Changes to term and votedFor need to be persisted
 	rf.persist()
 
-	// Reset election timer.
-	rf.lastHeartbeat = time.Now()
+	rf.ResetElectionTimer()
 }
 
 func (rf *Raft) ConvertToCandidate() {
@@ -41,6 +40,9 @@ func (rf *Raft) ConvertToCandidate() {
 	// and it waits for that timeout to elapse before starting the next election;
 	// this reduces the likelihood of another split vote in the new election (§5.2).
 	rf.ResetElectionTimer()
+
+	// Changes to term and votedFor need to be persisted.
+	rf.persist()
 }
 
 func (rf *Raft) BecomeLeader() {

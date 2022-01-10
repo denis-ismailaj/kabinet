@@ -56,7 +56,6 @@ func (rf *Raft) sendHeartbeat(i int, term int) {
 	if reply.Success {
 		DPrintf("%d Leader setting matchIndex to %d for follower %d\n", rf.me, reply.LastLogIndex, i)
 		rf.matchIndex[i] = reply.LastLogIndex
-
 		rf.refreshCommitIndex()
 	} else {
 		DPrintf("%d Leader failed to send AppendEntries with PrevLogIndex %d to %d.\n", rf.me, args.PrevLogIndex, i)
@@ -76,8 +75,14 @@ func (rf *Raft) sendHeartbeat(i int, term int) {
 func (rf *Raft) refreshCommitIndex() {
 	newIndex := rf.commitIndex
 
-	for rf.IsIndexCommitted(newIndex + 1) {
-		newIndex++
+	for i := rf.commitIndex; i <= rf.lastLogIndex(); i++ {
+		// Only log entries from the leader’s current term are committed by counting replicas;
+		// once an entry from the current term has been committed in this way,
+		// then all prior entries are committed indirectly because of the Log Matching Property.
+		if rf.termForEntry(i) == rf.currentTerm && rf.IsIndexCommitted(i) {
+			newIndex = i
+			DPrintf("%d found entry %d-%d from it's current term %d to be committed.\n", rf.me, rf.termForEntry(i), i, rf.currentTerm)
+		}
 	}
 
 	rf.updateCommitIndex(newIndex)

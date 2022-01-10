@@ -27,7 +27,11 @@ func (rf *Raft) lastLogIndex() int {
 }
 
 func (rf *Raft) lastLogTerm() int {
-	return rf.log[rf.lastLogIndex()].Term
+	return rf.termForEntry(rf.lastLogIndex())
+}
+
+func (rf *Raft) termForEntry(index int) int {
+	return rf.log[index].Term
 }
 
 func (rf *Raft) IsIndexCommitted(index int) bool {
