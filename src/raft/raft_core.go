@@ -35,15 +35,16 @@ type Raft struct {
 	applyChan chan ApplyMsg
 
 	// Persistent state
-	currentTerm int
-	votedFor    *int
-	log         map[int]Entry
+	currentTerm int           // latest term server has seen (initialized to 0 on first boot, increases monotonically)
+	votedFor    *int          // candidateId that received vote in current term (or null if none)
+	log         map[int]Entry // log entries; each entry contains command for state machine, and term when entry was received by leader (first index is 1)
 
-	// Volatile state
-	status          Status
-	commitIndex     int
-	lastApplied     int
-	matchIndex      map[int]int
+	status Status
+
+	commitIndex int         // index of the highest log entry known to be committed (initialized to 0, increases monotonically)
+	lastApplied int         // index of the highest log entry applied to state machine (initialized to 0, increases monotonically)
+	matchIndex  map[int]int // for each server, index of the highest log entry known to be replicated on server (initialized to 0, increases monotonically)
+
 	lastHeartbeat   time.Time
 	electionTimeout int64
 
