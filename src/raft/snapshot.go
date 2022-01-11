@@ -48,7 +48,11 @@ func (rf *Raft) saveSnapshot(index int, term int, snapshot []byte) {
 
 	rf.lastSnapshotIndex = index
 	rf.lastSnapshotTerm = term
+
 	rf.lastApplied = index
+
+	// Persist changes to lastSnapshotIndex and lastSnapshotTerm.
+	rf.persist()
 
 	rf.persister.SaveSnapshot(snapshot)
 

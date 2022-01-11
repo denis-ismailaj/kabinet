@@ -64,7 +64,9 @@ func (ps *Persister) SaveStateAndSnapshot(state []byte, snapshot []byte) {
 }
 
 func (ps *Persister) SaveSnapshot(snapshot []byte) {
-	ps.SaveStateAndSnapshot(ps.ReadRaftState(), snapshot)
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	ps.snapshot = clone(snapshot)
 }
 
 func (ps *Persister) ReadSnapshot() []byte {

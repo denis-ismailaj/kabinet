@@ -25,6 +25,9 @@ func (rf *Raft) persist() {
 		rf.safeEncode(e, -1)
 	}
 
+	rf.safeEncode(e, rf.lastSnapshotIndex)
+	rf.safeEncode(e, rf.lastSnapshotTerm)
+
 	data := w.Bytes()
 	rf.persister.SaveRaftState(data)
 }
@@ -52,9 +55,14 @@ func (rf *Raft) readPersist(data []byte) {
 	var votedFor int
 	var log map[int]Entry
 
+	var lastSnapshotIndex int
+	var lastSnapshotTerm int
+
 	if d.Decode(&currentTerm) != nil ||
 		d.Decode(&log) != nil ||
-		d.Decode(&votedFor) != nil {
+		d.Decode(&votedFor) != nil ||
+		d.Decode(&lastSnapshotIndex) != nil ||
+		d.Decode(&lastSnapshotTerm) != nil {
 		panic("Could not decode Raft state.")
 	} else {
 		rf.currentTerm = currentTerm
@@ -62,6 +70,13 @@ func (rf *Raft) readPersist(data []byte) {
 		if votedFor != -1 {
 			rf.votedFor = &votedFor
 		}
+
+		rf.lastSnapshotIndex = lastSnapshotIndex
+		rf.lastSnapshotTerm = lastSnapshotTerm
+
+		rf.commitIndex = lastSnapshotIndex
+		rf.lastApplied = lastSnapshotIndex
+
 		DPrintf("%d Restoring state with term %d\n", rf.me, rf.currentTerm)
 	}
 }
