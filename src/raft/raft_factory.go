@@ -30,7 +30,7 @@ func Make(
 
 	rf.log = map[int]Entry{}
 	rf.matchIndex = map[int]int{}
-	rf.nextIndex = map[int]int{}
+
 	rf.status = Follower
 	rf.statusCond = sync.NewCond(&rf.mu)
 

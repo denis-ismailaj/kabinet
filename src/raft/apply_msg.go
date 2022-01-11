@@ -23,17 +23,28 @@ type ApplyMsg struct {
 	SnapshotIndex int
 }
 
-func (rf *Raft) updateCommitIndex(newIndex int) {
+func (rf *Raft) notifyUpdateCommitIndex() {
+	rf.mu.Lock()
+	oldIndex := rf.lastApplied
+	newIndex := rf.commitIndex
+	rf.mu.Unlock()
+
 	// Send an ApplyMessage for each commitIndex increment
-	for i := rf.commitIndex + 1; i <= newIndex; i++ {
-		DPrintf("%d updated commitIndex to %d with command %v\n", rf.me, i, rf.log[i].Command)
+	for i := oldIndex + 1; i <= newIndex; i++ {
+		rf.mu.Lock()
+		command := rf.log[i].Command
+		DPrintf("%d updated commitIndex to %d with command %v nc %d\n", rf.me, i, command, rf.lastApplied)
+		rf.mu.Unlock()
 
 		rf.applyChan <- ApplyMsg{
 			CommandValid: true,
-			Command:      rf.log[i].Command,
+			Command:      command,
 			CommandIndex: i,
 		}
-	}
 
-	rf.commitIndex = newIndex
+		rf.mu.Lock()
+		DPrintf("%d updated lastApplied to %d\n", rf.me, i)
+		rf.lastApplied = i
+		rf.mu.Unlock()
+	}
 }

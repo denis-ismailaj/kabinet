@@ -23,7 +23,7 @@ func (rf *Raft) NoHeartbeatIn(milliseconds int64) bool {
 }
 
 func (rf *Raft) lastLogIndex() int {
-	return len(rf.log)
+	return rf.lastSnapshotIndex + len(rf.log)
 }
 
 func (rf *Raft) lastLogTerm() int {
@@ -31,6 +31,9 @@ func (rf *Raft) lastLogTerm() int {
 }
 
 func (rf *Raft) termForEntry(index int) int {
+	if index == rf.lastSnapshotIndex {
+		return rf.lastSnapshotTerm
+	}
 	return rf.log[index].Term
 }
 

@@ -42,10 +42,13 @@ type Raft struct {
 	// Volatile state
 	status          Status
 	commitIndex     int
-	nextIndex       map[int]int
+	lastApplied     int
 	matchIndex      map[int]int
 	lastHeartbeat   time.Time
 	electionTimeout int64
+
+	lastSnapshotIndex int
+	lastSnapshotTerm  int
 
 	// Condition variable for when Follower->Leader or Leader->Follower conversions happen.
 	// This is used by the dispatcher and ticker loops to stop when they shouldn't be active.

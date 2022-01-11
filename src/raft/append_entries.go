@@ -42,7 +42,6 @@ type AppendEntriesReply struct {
 //
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	rf.mu.Lock()
-	defer rf.mu.Unlock()
 
 	// Ignore AppendEntries with old terms and send back the current term for the leader to update itself.
 	if args.Term < rf.currentTerm {
@@ -51,6 +50,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 			Success: false,
 			Term:    rf.currentTerm,
 		}
+
+		rf.mu.Unlock()
 		return
 	}
 
@@ -74,6 +75,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 			LastLogIndex: rf.lastLogIndex(),
 			Term:         rf.currentTerm,
 		}
+
+		rf.mu.Unlock()
 		return
 	}
 
@@ -82,14 +85,16 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// leader’s log (§5.3).
 	rf.upsertEntries(args.Entries)
 
-	// The leader keeps track of the highest index it knows to be committed, and it includes that index in
-	// future AppendEntries RPCs (including heartbeats) so that the other servers eventually find out (§5.3).
-	rf.advanceCommitIndex(args.LeaderCommitIndex)
-
 	*reply = AppendEntriesReply{
 		Success:      true,
 		LastLogIndex: rf.lastLogIndex(),
 	}
+
+	rf.mu.Unlock()
+
+	// The leader keeps track of the highest index it knows to be committed, and it includes that index in
+	// future AppendEntries RPCs (including heartbeats) so that the other servers eventually find out (§5.3).
+	rf.advanceCommitIndex(args.LeaderCommitIndex)
 }
 
 // Insert or update follower's log entries
@@ -119,18 +124,19 @@ func (rf *Raft) upsertEntries(entries []Entry) {
 }
 
 // Update follower's commitIndex to that of the leader
+// Note: Some committed entries may not be here yet, so in that case set the commit index to the last log entry.
 func (rf *Raft) advanceCommitIndex(leaderCommitIndex int) {
-	// Note: Some committed entries may not be here yet, so in that case set the commit index to the last log entry.
+	rf.mu.Lock()
 
 	if leaderCommitIndex > rf.commitIndex {
-		var newIndex int
-
 		if leaderCommitIndex < rf.lastLogIndex() {
-			newIndex = leaderCommitIndex
+			rf.commitIndex = leaderCommitIndex
 		} else {
-			newIndex = rf.lastLogIndex()
+			rf.commitIndex = rf.lastLogIndex()
 		}
-
-		rf.updateCommitIndex(newIndex)
 	}
+
+	rf.mu.Unlock()
+
+	rf.notifyUpdateCommitIndex()
 }
