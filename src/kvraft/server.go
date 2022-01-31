@@ -20,9 +20,11 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
 }
 
 type Op struct {
-	Key   string
-	Value string
-	Type  shardkv.OpType
+	ClerkId int64
+	SeqNr   int
+	Key     string
+	Value   string
+	Type    shardkv.OpType
 }
 
 type KVServer struct {
@@ -38,7 +40,8 @@ type KVServer struct {
 	applyCond   *sync.Cond
 	commitEntry raft.ApplyMsg
 
-	pendingOps map[int]Op
+	pendingOps  map[int]Op
+	appliedReqs map[int64]int
 }
 
 func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
@@ -67,9 +70,11 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 
 func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	op := Op{
-		Type:  args.Op,
-		Value: args.Value,
-		Key:   args.Key,
+		ClerkId: args.ClerkId,
+		SeqNr:   args.SeqNr,
+		Type:    args.Op,
+		Value:   args.Value,
+		Key:     args.Key,
 	}
 
 	index, term, isLeader := kv.rf.Start(op)
@@ -153,6 +158,7 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv.applyCond = sync.NewCond(&kv.mu)
 
 	kv.data = make(map[string]string)
+	kv.appliedReqs = map[int64]int{}
 
 	kv.applyCh = make(chan raft.ApplyMsg)
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
@@ -175,10 +181,17 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 			op := i.Command.(Op)
 			kv.pendingOps[i.CommandIndex] = op
 
-			if op.Type == shardkv.Append {
-				kv.data[op.Key] = kv.data[op.Key] + op.Value
-			} else if op.Type == shardkv.Put {
-				kv.data[op.Key] = op.Value
+			if kv.appliedReqs[op.ClerkId] < op.SeqNr {
+				DPrintf("Updating appliedReqs for %d to %d", op.ClerkId, op.SeqNr)
+				kv.appliedReqs[op.ClerkId] = op.SeqNr
+
+				if op.Type == shardkv.Append {
+					kv.data[op.Key] = kv.data[op.Key] + op.Value
+				} else if op.Type == shardkv.Put {
+					kv.data[op.Key] = op.Value
+				}
+			} else {
+				DPrintf("Ignoring req %d for %d, already processed %d", op.SeqNr, op.ClerkId, kv.appliedReqs[op.ClerkId])
 			}
 
 			kv.commitEntry = i

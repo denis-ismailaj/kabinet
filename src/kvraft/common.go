@@ -11,9 +11,11 @@ const (
 type Err string
 
 type PutAppendArgs struct {
-	Key   string
-	Value string
-	Op    shardkv.OpType
+	ClerkId int64
+	SeqNr   int
+	Key     string
+	Value   string
+	Op      shardkv.OpType
 	// You'll have to add definitions here.
 	// Field names must start with capital letters,
 	// otherwise RPC will break.

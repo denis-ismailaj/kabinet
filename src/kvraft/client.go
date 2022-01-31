@@ -4,16 +4,19 @@ import (
 	"6.824/labrpc"
 	"6.824/raft"
 	"6.824/shardkv"
+	"sync"
 )
 import "crypto/rand"
 import "math/big"
 
 type Clerk struct {
 	servers []*labrpc.ClientEnd
-	// You will have to modify this struct.
+	mu      sync.Mutex
+	id      int64
+	seqNr   int
 }
 
-func nrand() int64 {
+func randInt() int64 {
 	max := big.NewInt(int64(1) << 62)
 	bigx, _ := rand.Int(rand.Reader, max)
 	x := bigx.Int64()
@@ -23,7 +26,7 @@ func nrand() int64 {
 func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	ck := new(Clerk)
 	ck.servers = servers
-	// You'll have to add code here.
+	ck.id = randInt()
 	return ck
 }
 
@@ -62,11 +65,17 @@ func (ck *Clerk) Get(key string) string {
 // shared by Put and Append.
 //
 func (ck *Clerk) PutAppend(key string, value string, op shardkv.OpType) {
+	ck.mu.Lock()
+	ck.seqNr++
 	args := PutAppendArgs{
-		Key:   key,
-		Value: value,
-		Op:    op,
+		ClerkId: ck.id,
+		SeqNr:   ck.seqNr,
+		Key:     key,
+		Value:   value,
+		Op:      op,
 	}
+	DPrintf("%v", args)
+	ck.mu.Unlock()
 
 	for {
 		reply := PutAppendReply{}
