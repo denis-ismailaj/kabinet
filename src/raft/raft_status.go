@@ -62,6 +62,6 @@ func (rf *Raft) BecomeLeader() {
 
 func (rf *Raft) ResetElectionTimer() {
 	// Assumes a locked raft instance
-	rf.electionTimeout = randomIntInRange(300, 400)
+	rf.electionTimeout = RandomIntInRange(300, 400)
 	rf.lastHeartbeat = time.Now()
 }
