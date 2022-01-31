@@ -16,20 +16,22 @@ package raft
 //
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	rf.mu.Lock()
-	defer rf.mu.Unlock()
 
 	if rf.status != Leader {
+		rf.mu.Unlock()
 		return 0, 0, false
 	}
 
-	index := rf.createLogEntry(command)
+	entry := rf.createLogEntry(command)
 
-	// Relying on the change to be propagated with future heartbeats.
+	rf.mu.Unlock()
 
-	return index, rf.currentTerm, true
+	rf.dispatchAppendEntries(entry.Term)
+
+	return entry.Index, entry.Term, true
 }
 
-func (rf *Raft) createLogEntry(command interface{}) int {
+func (rf *Raft) createLogEntry(command interface{}) Entry {
 	entry := Entry{
 		Term:    rf.currentTerm,
 		Command: command,
@@ -45,5 +47,5 @@ func (rf *Raft) createLogEntry(command interface{}) int {
 	// Update own matchIndex
 	rf.matchIndex[rf.me] = entry.Index
 
-	return entry.Index
+	return entry
 }

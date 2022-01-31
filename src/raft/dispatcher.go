@@ -24,13 +24,17 @@ func (rf *Raft) dispatcher() {
 
 		DPrintf("%d Leader dispatching heartbeats on term %d\n", rf.me, term)
 
-		for i := range rf.peers {
-			if i != rf.me {
-				go rf.sendHeartbeat(i, term)
-			}
-		}
+		rf.dispatchAppendEntries(term)
 
 		// Wait some time before sending again
 		time.Sleep(120 * time.Millisecond)
+	}
+}
+
+func (rf *Raft) dispatchAppendEntries(term int) {
+	for i := range rf.peers {
+		if i != rf.me {
+			go rf.sendHeartbeat(i, term)
+		}
 	}
 }
