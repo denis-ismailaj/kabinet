@@ -30,11 +30,10 @@ func (rf *Raft) sendSnapshot(i int, term int) {
 		return
 	}
 
-	// Convert to follower if term is out of date.
-	if reply.Term > rf.currentTerm {
-		rf.BecomeFollowerOrUpdateTerm(reply.Term)
+	if rf.checkTerm(reply.Term); rf.status != Leader {
 		return
 	}
 
-	rf.matchIndex[i] = reply.LastLogIndex
+	// Reset nextIndex to default
+	rf.nextIndex[i] = rf.lastLogIndex() + 1
 }

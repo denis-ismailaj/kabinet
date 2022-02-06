@@ -1,6 +1,8 @@
 package raft
 
-import "time"
+import (
+	"time"
+)
 
 type Status int64
 
@@ -10,22 +12,28 @@ const (
 	Follower  Status = 3
 )
 
-func (rf *Raft) BecomeFollowerOrUpdateTerm(term int) {
-	// It is safe to call if the server is already a follower
-
-	if rf.status != Follower {
-		DPrintf("%d converting to follower on term %d\n", rf.me, term)
-		rf.status = Follower
-		rf.votedFor = nil
-		rf.statusCond.Broadcast()
+func (rf *Raft) checkTerm(term int) bool {
+	if term < rf.currentTerm {
+		return false
 	}
 
-	rf.currentTerm = term
+	if term > rf.currentTerm {
+		rf.currentTerm = term
+		rf.votedFor = nil
 
-	// Changes to term and votedFor need to be persisted
-	rf.persist()
+		if rf.status != Follower {
+			DPrintf("%d converting to follower on term %d\n", rf.me, term)
+			rf.status = Follower
+			rf.statusCond.Broadcast()
+		}
 
-	rf.ResetElectionTimer()
+		// Changes to term and votedFor need to be persisted
+		rf.persist()
+
+		rf.ResetElectionTimer()
+	}
+
+	return true
 }
 
 func (rf *Raft) ConvertToCandidate() {
@@ -56,8 +64,18 @@ func (rf *Raft) BecomeLeader() {
 
 	DPrintf("%d self-declared leader on term %d.\n", rf.me, rf.currentTerm)
 
+	rf.ResetFollowerIndices()
+
 	rf.status = Leader
 	rf.statusCond.Broadcast()
+}
+
+func (rf *Raft) ResetFollowerIndices() {
+	nextIndex := rf.lastLogIndex() + 1
+	for i := 0; i < len(rf.peers); i++ {
+		rf.matchIndex[i] = -1
+		rf.nextIndex[i] = nextIndex
+	}
 }
 
 func (rf *Raft) ResetElectionTimer() {

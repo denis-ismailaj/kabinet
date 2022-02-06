@@ -47,6 +47,6 @@ func (rf *Raft) IsIndexCommitted(index int) bool {
 	return count > len(rf.peers)/2
 }
 
-func (rf *Raft) hasVotedFor(id int) bool {
-	return rf.votedFor != nil && *rf.votedFor == id
+func (rf *Raft) canVoteFor(id int) bool {
+	return rf.votedFor == nil || *rf.votedFor == id
 }

@@ -15,12 +15,13 @@ func (rf *Raft) ticker() {
 			continue
 		}
 
-		shouldStartElection := rf.NoHeartbeatIn(rf.electionTimeout)
+		timeout := rf.electionTimeout
+		shouldStartElection := rf.NoHeartbeatIn(timeout)
 
 		rf.mu.Unlock()
 
 		if shouldStartElection {
-			DPrintf("%d received no heartbeat in %d milliseconds\n", rf.me, rf.electionTimeout)
+			DPrintf("%d received no heartbeat in %d milliseconds\n", rf.me, timeout)
 			rf.startElection()
 		}
 

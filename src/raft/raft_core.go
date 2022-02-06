@@ -13,7 +13,7 @@ import (
 //
 // rf = Make(...)
 //   create a new Raft server.
-// rf.Start(command interface{}) (index, Term, isleader)
+// rf.Start(command interface{}) (index, Term, isLeader)
 //   start agreement on a new log entry
 // rf.GetState() (Term, isLeader)
 //   ask a Raft for its current Term, and whether it thinks it is leader
@@ -32,7 +32,9 @@ type Raft struct {
 	persister *Persister          // Object to hold this peer's persisted state
 	me        int                 // this peer's index into peers[]
 	dead      int32               // set by Kill()
+
 	applyChan chan ApplyMsg
+	applyLock uint32
 
 	// Persistent state
 	currentTerm int           // latest term server has seen (initialized to 0 on first boot, increases monotonically)
@@ -41,9 +43,11 @@ type Raft struct {
 
 	status Status
 
-	commitIndex int         // index of the highest log entry known to be committed (initialized to 0, increases monotonically)
-	lastApplied int         // index of the highest log entry applied to state machine (initialized to 0, increases monotonically)
-	matchIndex  map[int]int // for each server, index of the highest log entry known to be replicated on server (initialized to 0, increases monotonically)
+	commitIndex int // index of the highest log entry known to be committed (initialized to 0, increases monotonically)
+	lastApplied int // index of the highest log entry applied to state machine (initialized to 0, increases monotonically)
+
+	matchIndex map[int]int // for each server, index of the highest log entry known to be replicated on server (initialized to 0, increases monotonically)
+	nextIndex  map[int]int // for each server, index of the next log entry to send to that server (initialized to leader last log index + 1)
 
 	lastHeartbeat   time.Time
 	electionTimeout int64

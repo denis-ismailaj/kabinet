@@ -38,7 +38,7 @@ func (rf *Raft) createLogEntry(command interface{}) Entry {
 		Index:   rf.lastLogIndex() + 1,
 	}
 
-	DPrintf("%d Leader logging entry with index %d term %d command %v\n", rf.me, entry.Index, entry.Term, entry.Command)
+	DPrintf("%d Leader logging entry %d-%d command %v\n", rf.me, entry.Term, entry.Index, entry.Command)
 
 	// Insert entry to log
 	rf.log[entry.Index] = entry

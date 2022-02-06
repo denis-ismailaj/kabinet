@@ -34,7 +34,7 @@ func (rf *Raft) dispatcher() {
 func (rf *Raft) dispatchAppendEntries(term int) {
 	for i := range rf.peers {
 		if i != rf.me {
-			go rf.sendHeartbeat(i, term)
+			go rf.updateFollower(i, term)
 		}
 	}
 }

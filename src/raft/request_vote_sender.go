@@ -26,20 +26,22 @@ func (rf *Raft) startElection() {
 func (rf *Raft) askForVotes(voteChannel chan *RequestVoteReply, args RequestVoteArgs) {
 	// The candidate issues RequestVote RPCs in parallel to each of the other servers in the cluster (§5.2).
 	for i := range rf.peers {
-		if i != rf.me {
-			go func(i int) {
-				DPrintf("%d asking for vote from %d on term %d\n", rf.me, i, rf.currentTerm)
-
-				// Not bothering retrying failed vote requests, because if the election is not won quickly
-				// it will soon be restarted anyway.
-				reply := &RequestVoteReply{}
-				ok := rf.peers[i].Call("Raft.RequestVote", &args, reply)
-
-				if ok {
-					voteChannel <- reply
-				}
-			}(i)
+		if i == rf.me {
+			continue
 		}
+
+		go func(i int) {
+			DPrintf("%d asking for vote from %d on term %d\n", rf.me, i, args.Term)
+
+			// Not bothering retrying failed vote requests, because if the election is not won quickly
+			// it will soon be restarted anyway.
+			reply := &RequestVoteReply{}
+			ok := rf.peers[i].Call("Raft.RequestVote", &args, reply)
+
+			if ok {
+				voteChannel <- reply
+			}
+		}(i)
 	}
 }
 
@@ -52,19 +54,22 @@ func (rf *Raft) countVotes(voteChannel chan *RequestVoteReply, term int) {
 
 		// Stop the count if the server has moved on.
 		if rf.currentTerm > term {
+			DPrintf("%d stopping count for old election %d, now on term %d", rf.me, term, rf.currentTerm)
 			rf.mu.Unlock()
 			return
 		}
 
-		// Convert to follower if term is out of date.
-		if reply.Term > rf.currentTerm {
-			rf.BecomeFollowerOrUpdateTerm(reply.Term)
+		ok := rf.checkTerm(reply.Term)
+
+		if rf.status != Candidate {
+			DPrintf("%d stopping count for election %d, not a candidate anymore", rf.me, term)
 			rf.mu.Unlock()
 			return
 		}
+
 		rf.mu.Unlock()
 
-		if reply.VoteGranted {
+		if reply.VoteGranted && ok {
 			votesReceived++
 			DPrintf("%d vote count %d/%d\n", rf.me, votesReceived, len(rf.peers))
 		}
