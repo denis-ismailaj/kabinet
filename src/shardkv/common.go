@@ -33,6 +33,7 @@ type OpType string
 const (
 	Put    OpType = "Put"
 	Append OpType = "Append"
+	Get    OpType = "Get"
 )
 
 type PutAppendReply struct {

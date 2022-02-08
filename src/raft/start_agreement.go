@@ -26,7 +26,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 
 	rf.mu.Unlock()
 
-	rf.dispatchAppendEntries(entry.Term)
+	go rf.dispatchAppendEntries(entry.Term)
 
 	return entry.Index, entry.Term, true
 }

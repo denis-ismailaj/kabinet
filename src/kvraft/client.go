@@ -10,10 +10,11 @@ import "crypto/rand"
 import "math/big"
 
 type Clerk struct {
-	servers []*labrpc.ClientEnd
-	mu      sync.Mutex
-	id      int64
-	seqNr   int
+	servers    []*labrpc.ClientEnd
+	mu         sync.Mutex
+	id         int64
+	seqNr      int
+	lastLeader *int64
 }
 
 func randInt() int64 {
@@ -34,28 +35,34 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 // returns "" if the key does not exist.
 // keeps trying forever in the face of all other errors.
 func (ck *Clerk) Get(key string) string {
-	DPrintf("clerk getting %s", key)
-
-	args := GetArgs{
-		Key: key,
+	ck.mu.Lock()
+	ck.seqNr++
+	args := Op{
+		ClerkId: ck.id,
+		SeqNr:   ck.seqNr,
+		Key:     key,
+		Type:    shardkv.Get,
 	}
+	ck.mu.Unlock()
 
 	for {
 		reply := GetReply{}
 
-		server := raft.RandomIntInRange(0, int64(len(ck.servers)-1))
-		DPrintf("clerk trying %d for %s", server, key)
-
-		_ = ck.servers[server].Call("KVServer.Get", &args, &reply)
+		leader := ck.getLeader()
+		ok := ck.servers[leader].Call("KVServer.Get", args, &reply)
 
 		if reply.Err == OK {
-			DPrintf("clerk found %s to be %s", key, reply.Value)
+			DPrintf("clerk found %s @ %d to be %s", key, leader, reply.Value)
 
 			return reply.Value
 		} else if reply.Err == ErrNoKey {
-			DPrintf("clerk found %s to be missing", key)
+			DPrintf("clerk found %s @ %d to be missing", key, leader)
 
 			return ""
+		} else if reply.Err == ErrWrongLeader || !ok {
+			ck.invalidateLeader()
+		} else {
+			DPrintf("clerk %d requiring %s from %d got error %s", ck.id, key, leader, reply.Err)
 		}
 	}
 }
@@ -64,27 +71,28 @@ func (ck *Clerk) Get(key string) string {
 // PutAppend
 // shared by Put and Append.
 //
-func (ck *Clerk) PutAppend(key string, value string, op shardkv.OpType) {
+func (ck *Clerk) PutAppend(key string, value string, opType shardkv.OpType) {
 	ck.mu.Lock()
 	ck.seqNr++
-	args := PutAppendArgs{
+	args := Op{
 		ClerkId: ck.id,
 		SeqNr:   ck.seqNr,
 		Key:     key,
 		Value:   value,
-		Op:      op,
+		Type:    opType,
 	}
-	DPrintf("%v", args)
 	ck.mu.Unlock()
 
 	for {
 		reply := PutAppendReply{}
 
-		server := raft.RandomIntInRange(0, int64(len(ck.servers)-1))
-		_ = ck.servers[server].Call("KVServer.PutAppend", &args, &reply)
+		leader := ck.getLeader()
+		ok := ck.servers[leader].Call("KVServer.PutAppend", args, &reply)
 
 		if reply.Err == OK {
 			break
+		} else if reply.Err == ErrWrongLeader || !ok {
+			ck.invalidateLeader()
 		}
 	}
 }
@@ -94,4 +102,22 @@ func (ck *Clerk) Put(key string, value string) {
 }
 func (ck *Clerk) Append(key string, value string) {
 	ck.PutAppend(key, value, shardkv.Append)
+}
+
+func (ck *Clerk) getLeader() int64 {
+	ck.mu.Lock()
+	defer ck.mu.Unlock()
+
+	if ck.lastLeader == nil {
+		randChoice := raft.RandomIntInRange(0, int64(len(ck.servers)-1))
+		ck.lastLeader = &randChoice
+	}
+
+	return *ck.lastLeader
+}
+
+func (ck *Clerk) invalidateLeader() {
+	ck.mu.Lock()
+	ck.lastLeader = nil
+	ck.mu.Unlock()
 }

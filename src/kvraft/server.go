@@ -36,76 +36,70 @@ type KVServer struct {
 
 	maxRaftState int // snapshot if log grows this big
 
-	data        map[string]string
-	applyCond   *sync.Cond
-	commitEntry raft.ApplyMsg
+	data map[string]string
 
-	pendingOps  map[int]Op
+	applyCond   *sync.Cond
 	appliedReqs map[int64]int
 }
 
-func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
-	if _, isLeader := kv.rf.GetState(); !isLeader {
-		*reply = GetReply{
-			Err: ErrWrongLeader,
+func (kv *KVServer) Get(args Op, reply *GetReply) {
+	err := kv.SubmitForAgreement(args)
+
+	if err == OK {
+		kv.mu.Lock()
+		val, exists := kv.data[args.Key]
+		kv.mu.Unlock()
+
+		if !exists {
+			*reply = GetReply{
+				Err: ErrNoKey,
+			}
+		} else {
+			*reply = GetReply{
+				Err:   OK,
+				Value: val,
+			}
 		}
-		return
-	}
-
-	kv.mu.Lock()
-	val, ok := kv.data[args.Key]
-	kv.mu.Unlock()
-
-	if !ok {
+	} else {
 		*reply = GetReply{
-			Err: ErrNoKey,
+			Err: err,
 		}
-	}
-
-	*reply = GetReply{
-		Err:   OK,
-		Value: val,
 	}
 }
 
-func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
-	op := Op{
-		ClerkId: args.ClerkId,
-		SeqNr:   args.SeqNr,
-		Type:    args.Op,
-		Value:   args.Value,
-		Key:     args.Key,
-	}
+func (kv *KVServer) PutAppend(args Op, reply *PutAppendReply) {
+	err := kv.SubmitForAgreement(args)
 
-	index, term, isLeader := kv.rf.Start(op)
+	*reply = PutAppendReply{
+		Err: err,
+	}
+}
+
+func (kv *KVServer) SubmitForAgreement(args Op) Err {
+	DPrintf("%d going to start %v", kv.me, args)
+	index, term, isLeader := kv.rf.Start(args)
 
 	if !isLeader {
-		*reply = PutAppendReply{
-			Err: ErrWrongLeader,
-		}
-		return
+		return ErrWrongLeader
 	}
 
-	DPrintf("%d starting %d-%d %v", kv.me, term, index, op)
+	DPrintf("%d starting %d-%d %v", kv.me, term, index, args)
 
 	kv.mu.Lock()
-	for {
-		kv.applyCond.Wait()
+	defer kv.mu.Unlock()
 
-		if val, exists := kv.pendingOps[index]; exists {
-			if val == op {
-				*reply = PutAppendReply{
-					Err: OK,
-				}
-			} else {
-				*reply = PutAppendReply{
-					Err: "Sorry",
-				}
-			}
-			break
+	for {
+		cTerm, _ := kv.rf.GetState()
+		if cTerm > term {
+			return "Sorry"
 		}
+
+		if kv.appliedReqs[args.ClerkId] >= args.SeqNr {
+			return OK
+		}
+
+		kv.applyCond.Wait()
 	}
-	kv.mu.Unlock()
 }
 
 //
@@ -163,38 +157,37 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv.applyCh = make(chan raft.ApplyMsg)
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
 
-	kv.pendingOps = make(map[int]Op)
-
 	go func() {
 		for i := range kv.applyCh {
+			DPrintf("%d apply %v", kv.me, i)
+
 			if !i.CommandValid {
 				continue
 			}
 
-			kv.mu.Lock()
-
-			if i.CommandIndex <= kv.commitEntry.CommandIndex {
-				kv.mu.Unlock()
+			// This is a no-op entry.
+			// Leader may have been deposed so wake up applier.
+			if i.Command == nil {
+				kv.applyCond.Broadcast()
 				continue
 			}
 
 			op := i.Command.(Op)
-			kv.pendingOps[i.CommandIndex] = op
 
+			kv.mu.Lock()
 			if kv.appliedReqs[op.ClerkId] < op.SeqNr {
-				DPrintf("Updating appliedReqs for %d to %d", op.ClerkId, op.SeqNr)
+				DPrintf("%d Updating appliedReqs for %d to %d, was %d", kv.me, op.ClerkId, op.SeqNr, kv.appliedReqs[op.ClerkId])
 				kv.appliedReqs[op.ClerkId] = op.SeqNr
 
-				if op.Type == shardkv.Append {
-					kv.data[op.Key] = kv.data[op.Key] + op.Value
-				} else if op.Type == shardkv.Put {
+				switch op.Type {
+				case shardkv.Append:
+					kv.data[op.Key] += op.Value
+				case shardkv.Put:
 					kv.data[op.Key] = op.Value
 				}
 			} else {
-				DPrintf("Ignoring req %d for %d, already processed %d", op.SeqNr, op.ClerkId, kv.appliedReqs[op.ClerkId])
+				DPrintf("%d Ignoring req %d for %d, already processed %d", kv.me, op.SeqNr, op.ClerkId, kv.appliedReqs[op.ClerkId])
 			}
-
-			kv.commitEntry = i
 			kv.mu.Unlock()
 
 			kv.applyCond.Broadcast()
