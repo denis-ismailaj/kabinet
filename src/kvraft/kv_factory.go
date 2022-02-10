@@ -8,6 +8,23 @@ import (
 	"sync"
 )
 
+type KVServer struct {
+	mu      sync.Mutex
+	me      int
+	rf      *raft.Raft
+	applyCh chan raft.ApplyMsg
+	dead    int32 // set by Kill()
+
+	maxRaftState int // snapshot if log grows this big
+	persister    *raft.Persister
+
+	data map[string]string
+
+	applyCond       *sync.Cond
+	appliedReqs     map[int64]int
+	latestRaftIndex int
+}
+
 //
 // StartKVServer
 // servers[] contains the ports of the set of
@@ -39,10 +56,15 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv.data = make(map[string]string)
 	kv.appliedReqs = map[int64]int{}
 
+	kv.persister = persister
+
 	kv.applyCh = make(chan raft.ApplyMsg)
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
 
+	kv.restoreFromSnapshot()
+
 	go kv.applier()
+	go kv.trimmer()
 
 	return kv
 }

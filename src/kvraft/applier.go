@@ -1,14 +1,27 @@
 package kvraft
 
-import "6.824/shardkv"
+import (
+	"6.824/shardkv"
+)
 
 func (kv *KVServer) applier() {
 	for i := range kv.applyCh {
 		DPrintf("%d apply %v", kv.me, i)
 
+		if i.SnapshotValid {
+			kv.handleSnapshot(i)
+			continue
+		}
+
 		if !i.CommandValid {
 			continue
 		}
+
+		kv.mu.Lock()
+		if i.CommandIndex > kv.latestRaftIndex {
+			kv.latestRaftIndex = i.CommandIndex
+		}
+		kv.mu.Unlock()
 
 		// This is a no-op entry.
 		// Leader may have been deposed so wake up applier.

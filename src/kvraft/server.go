@@ -1,9 +1,7 @@
 package kvraft
 
 import (
-	"6.824/raft"
 	"6.824/shardkv"
-	"sync"
 )
 
 type Op struct {
@@ -12,21 +10,6 @@ type Op struct {
 	Key     string
 	Value   string
 	Type    shardkv.OpType
-}
-
-type KVServer struct {
-	mu      sync.Mutex
-	me      int
-	rf      *raft.Raft
-	applyCh chan raft.ApplyMsg
-	dead    int32 // set by Kill()
-
-	maxRaftState int // snapshot if log grows this big
-
-	data map[string]string
-
-	applyCond   *sync.Cond
-	appliedReqs map[int64]int
 }
 
 func (kv *KVServer) Get(args Op, reply *GetReply) {
@@ -63,7 +46,6 @@ func (kv *KVServer) PutAppend(args Op, reply *PutAppendReply) {
 }
 
 func (kv *KVServer) SubmitForAgreement(args Op) Err {
-	DPrintf("%d going to start %v", kv.me, args)
 	index, term, isLeader := kv.rf.Start(args)
 
 	if !isLeader {
