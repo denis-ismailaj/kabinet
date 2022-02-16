@@ -2,7 +2,6 @@ package kvraft
 
 import (
 	"6.824/raft"
-	"log"
 	"time"
 )
 
@@ -19,19 +18,22 @@ func (kv *KVServer) handleSnapshot(msg raft.ApplyMsg) {
 	if msg.SnapshotIndex > kv.latestRaftIndex {
 		kv.latestRaftIndex = msg.SnapshotIndex
 	}
+
+	kv.restoreFromSnapshotNoCheck(msg.Snapshot)
 }
 
 func (kv *KVServer) trimmer() {
 	for {
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 
-		if kv.maxRaftState != -1 && kv.persister.RaftStateSize() > kv.maxRaftState/2 {
-			kv.mu.Lock()
-			log.Printf("%d trimming logs at %d\n", kv.me, kv.latestRaftIndex)
+		kv.mu.Lock()
+		if kv.maxRaftState != -1 && kv.latestRaftIndex > kv.latestTrimRequest && kv.persister.RaftStateSize() > kv.maxRaftState/2 {
+			DPrintf("%d trimming logs at %d because %d > %d\n", kv.me, kv.latestRaftIndex, kv.persister.RaftStateSize(), kv.maxRaftState/2)
 			state := kv.getStateBytes()
 
 			kv.rf.Snapshot(kv.latestRaftIndex, state)
-			kv.mu.Unlock()
+			kv.latestTrimRequest = kv.latestRaftIndex
 		}
+		kv.mu.Unlock()
 	}
 }

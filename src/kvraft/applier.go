@@ -17,12 +17,6 @@ func (kv *KVServer) applier() {
 			continue
 		}
 
-		kv.mu.Lock()
-		if i.CommandIndex > kv.latestRaftIndex {
-			kv.latestRaftIndex = i.CommandIndex
-		}
-		kv.mu.Unlock()
-
 		// This is a no-op entry.
 		// Leader may have been deposed so wake up applier.
 		if i.Command == nil {
@@ -33,8 +27,10 @@ func (kv *KVServer) applier() {
 		op := i.Command.(Op)
 
 		kv.mu.Lock()
+		kv.latestRaftIndex = i.CommandIndex
+
 		if kv.appliedReqs[op.ClerkId] < op.SeqNr {
-			DPrintf("%d Updating appliedReqs for %d to %d, was %d", kv.me, op.ClerkId, op.SeqNr, kv.appliedReqs[op.ClerkId])
+			//DPrintf("%d Updating appliedReqs for %d to %d, was %d", kv.me, op.ClerkId, op.SeqNr, kv.appliedReqs[op.ClerkId])
 			kv.appliedReqs[op.ClerkId] = op.SeqNr
 
 			switch op.Type {
@@ -44,7 +40,7 @@ func (kv *KVServer) applier() {
 				kv.data[op.Key] = op.Value
 			}
 		} else {
-			DPrintf("%d Ignoring req %d for %d, already processed %d", kv.me, op.SeqNr, op.ClerkId, kv.appliedReqs[op.ClerkId])
+			//DPrintf("%d Ignoring req %d for %d, already processed %d", kv.me, op.SeqNr, op.ClerkId, kv.appliedReqs[op.ClerkId])
 		}
 		kv.mu.Unlock()
 

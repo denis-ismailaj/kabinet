@@ -94,6 +94,8 @@ func (rf *Raft) updateFollower(i int, term int) {
 		rf.matchIndex[i] = reply.LastLogIndex
 	}
 
+	DPrintf("%d Leader set nextIndex for %d to %d.\n", rf.me, i, rf.nextIndex[i])
+
 	rf.mu.Unlock()
 
 	rf.refreshCommitIndex()

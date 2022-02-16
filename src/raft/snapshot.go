@@ -47,6 +47,7 @@ func (rf *Raft) saveSnapshot(index int, term int, snapshot []byte) {
 	rf.lastSnapshotTerm = term
 
 	rf.lastApplied = index
+	DPrintf("%d updated lastApplied to %d because of snapshot\n", rf.me, rf.lastApplied)
 
 	// Persist changes to lastSnapshotIndex and lastSnapshotTerm.
 	rf.persist()

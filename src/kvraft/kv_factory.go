@@ -20,9 +20,10 @@ type KVServer struct {
 
 	data map[string]string
 
-	applyCond       *sync.Cond
-	appliedReqs     map[int64]int
-	latestRaftIndex int
+	applyCond         *sync.Cond
+	appliedReqs       map[int64]int
+	latestRaftIndex   int
+	latestTrimRequest int
 }
 
 //

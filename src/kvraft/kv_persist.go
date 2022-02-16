@@ -13,9 +13,12 @@ func (kv *KVServer) getStateBytes() []byte {
 	w := new(bytes.Buffer)
 	e := labgob.NewEncoder(w)
 
-	DPrintf("%d Persisting state\n", kv.me)
+	//DPrintf("%d Persisting state\n", kv.me)
 
 	kv.safeEncode(e, kv.data)
+	kv.safeEncode(e, kv.latestRaftIndex)
+	kv.safeEncode(e, kv.appliedReqs)
+	kv.safeEncode(e, kv.latestTrimRequest)
 
 	return w.Bytes()
 }
@@ -40,15 +43,28 @@ func (kv *KVServer) restoreFromSnapshot() {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
+	kv.restoreFromSnapshotNoCheck(data)
+}
+
+func (kv *KVServer) restoreFromSnapshotNoCheck(data []byte) {
 	r := bytes.NewBuffer(data)
 	d := labgob.NewDecoder(r)
 
 	var kvData map[string]string
+	var latestRaftIndex int
+	var appliedReqs map[int64]int
+	var latestTrimRequest int
 
-	if d.Decode(&kvData) != nil {
+	if d.Decode(&kvData) != nil ||
+		d.Decode(&latestRaftIndex) != nil ||
+		d.Decode(&appliedReqs) != nil ||
+		d.Decode(&latestTrimRequest) != nil {
 		panic("Could not decode KVServer state.")
 	} else {
 		kv.data = kvData
+		kv.latestRaftIndex = latestRaftIndex
+		kv.appliedReqs = appliedReqs
+		kv.latestTrimRequest = latestTrimRequest
 
 		DPrintf("%d Restoring state\n", kv.me)
 	}
